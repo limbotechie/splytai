@@ -2,6 +2,7 @@ services:
   - type: web
     name: splyt-testnet-relay
     runtime: node
+    plan: free
     rootDir: apps/backend
     buildCommand: "npm install --no-audit --no-fund && npm run build"
     startCommand: npm run start
