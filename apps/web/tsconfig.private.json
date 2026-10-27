@@ -1,0 +1,17 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": false
+  },
+  "include": [
+    "next-env.d.ts",
+    "lib/bills/**/*.ts",
+    "lib/ocr/**/*.ts",
+    "lib/private-workspace/**/*.ts",
+    "lib/rates/**/*.ts",
+    "lib/requests/**/*.ts",
+    "lib/workflow/**/*.ts",
+    "lib/zcash/**/*.ts"
+  ],
+  "exclude": ["node_modules", "**/*.test.ts"]
+}

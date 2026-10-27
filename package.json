@@ -1,0 +1,23 @@
+{
+  "name": "splyt",
+  "private": true,
+  "workspaces": [
+    "apps/web",
+    "apps/backend"
+  ],
+  "scripts": {
+    "dev": "concurrently -k -n relay,web \"npm run dev -w apps/backend\" \"npm run dev -w apps/web\"",
+    "build": "npm run build -w apps/backend && npm run build -w apps/web",
+    "lint": "npm run lint --workspaces",
+    "typecheck": "npm run typecheck --workspaces",
+    "test": "npm run test --workspaces",
+    "prepare:assets": "npm run prepare:assets -w apps/web"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.1"
+  },
+  "allowScripts": {
+    "tesseract.js@6.0.1": true,
+    "unrs-resolver@1.12.2": true
+  }
+}
