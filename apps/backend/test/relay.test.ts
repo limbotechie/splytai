@@ -595,6 +595,25 @@ describe("rates endpoint hardening", () => {
     const provider = new PublicRates(fetcher, () => clock);
     await expect(provider.get("USD")).rejects.toThrow(/unavailable/i);
   });
+
+  it("falls back to keyless CoinPaprika when CoinGecko is blocked with 403", async () => {
+    const fetcher: typeof fetch = async (url) => {
+      const parsed = new URL(String(url));
+      if (parsed.origin === "https://api.coingecko.com") {
+        return new Response("Forbidden", { status: 403 });
+      }
+      expect(parsed.origin).toBe("https://api.coinpaprika.com");
+      return new Response(JSON.stringify({
+        id: "zec-zcash",
+        last_updated: new Date(clock).toISOString(),
+        quotes: { USD: { price: 34.5 } },
+      }));
+    };
+    const provider = new PublicRates(fetcher, () => clock);
+    const quote = await provider.get("USD");
+    expect(quote.price).toBe("34.5");
+    expect(quote.currency).toBe("USD");
+  });
 });
 
 describe("authorised() helper unit tests", () => {

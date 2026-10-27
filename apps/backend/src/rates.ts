@@ -19,6 +19,7 @@ export class PublicRates {
     return request;
   }
   private async load(currency: string): Promise<Quote> {
+    // 1. Try CoinGecko (with optional API key and descriptive User-Agent)
     try {
       const url = new URL("https://api.coingecko.com/api/v3/simple/price");
       url.search = new URLSearchParams({ ids: "zcash", vs_currencies: currency.toLowerCase(), include_last_updated_at: "true" }).toString();
@@ -31,21 +32,54 @@ export class PublicRates {
         headers["x-cg-demo-api-key"] = apiKey;
       }
       const response = await this.fetcher(url, { headers, signal: AbortSignal.timeout(8000) });
-      if (!response.ok) throw new Error(`Upstream unavailable (status ${response.status})`);
-      const text = await response.text();
-      if (text.length > 10000) throw new Error("Invalid upstream response");
-      const data = parse(text) as { zcash?: Record<string, unknown> };
-      const price = data.zcash?.[currency.toLowerCase()];
-      const updated = data.zcash?.last_updated_at;
-      if (!isLosslessNumber(price) || !isLosslessNumber(updated) || !/^\d+(?:\.\d{1,18})?$/.test(price.value) || price.value.length > 40 || /^0(?:\.0+)?$/.test(price.value) || !/^\d{1,12}$/.test(updated.value)) throw new Error("Invalid upstream response");
-      const updatedMs = Number(updated.value) * 1000;
-      if (this.now() - updatedMs > 300000 || updatedMs > this.now() + 60000) throw new Error("Stale upstream response");
-      const quote: Quote = { source: "coingecko", currency, price: price.value, updatedAt: new Date(updatedMs).toISOString(), fetchedAt: new Date(this.now()).toISOString() };
-      this.cache.set(currency, { quote, until: this.now() + 60000 });
-      return quote;
-    } catch (error) {
-      console.error("Rates fetch error for currency %s:", currency, error instanceof Error ? error.message : error);
-      throw new RelayError(503, "Market information is unavailable. Enter and approve a manual ZEC total instead.");
+      if (response.ok) {
+        const text = await response.text();
+        if (text.length <= 10000) {
+          const data = parse(text) as { zcash?: Record<string, unknown> };
+          const price = data.zcash?.[currency.toLowerCase()];
+          const updated = data.zcash?.last_updated_at;
+          if (isLosslessNumber(price) && isLosslessNumber(updated) && /^\d+(?:\.\d{1,18})?$/.test(price.value) && price.value.length <= 40 && !/^0(?:\.0+)?$/.test(price.value) && /^\d{1,12}$/.test(updated.value)) {
+            const updatedMs = Number(updated.value) * 1000;
+            if (this.now() - updatedMs <= 300000 && updatedMs <= this.now() + 60000) {
+              const quote: Quote = { source: "coingecko", currency, price: price.value, updatedAt: new Date(updatedMs).toISOString(), fetchedAt: new Date(this.now()).toISOString() };
+              this.cache.set(currency, { quote, until: this.now() + 60000 });
+              return quote;
+            }
+          }
+        }
+      }
+    } catch {
+      // Continue to keyless fallback
     }
+
+    // 2. Fall back to CoinPaprika (keyless public endpoint, unblocked on datacenter IPs)
+    try {
+      const paprikaUrl = new URL("https://api.coinpaprika.com/v1/tickers/zec-zcash");
+      paprikaUrl.search = new URLSearchParams({ quotes: currency.toUpperCase() }).toString();
+      const response = await this.fetcher(paprikaUrl, {
+        headers: { accept: "application/json", "user-agent": "SplytRelay/1.0 (+https://splyttab.vercel.app)" },
+        signal: AbortSignal.timeout(8000),
+      });
+      if (response.ok) {
+        const text = await response.text();
+        if (text.length <= 10000) {
+          const data = parse(text) as { quotes?: Record<string, { price?: unknown }>; last_updated?: unknown };
+          const quoteEntry = data.quotes?.[currency.toUpperCase()];
+          const price = quoteEntry?.price;
+          if (isLosslessNumber(price) && /^\d+(?:\.\d{1,18})?$/.test(price.value) && price.value.length <= 40 && !/^0(?:\.0+)?$/.test(price.value)) {
+            const updatedMs = typeof data.last_updated === "string" ? Date.parse(data.last_updated) : this.now();
+            if (!Number.isNaN(updatedMs) && this.now() - updatedMs <= 300000 && updatedMs <= this.now() + 60000) {
+              const quote: Quote = { source: "coingecko", currency, price: price.value, updatedAt: new Date(updatedMs).toISOString(), fetchedAt: new Date(this.now()).toISOString() };
+              this.cache.set(currency, { quote, until: this.now() + 60000 });
+              return quote;
+            }
+          }
+        }
+      }
+    } catch {
+      // Continue to final error
+    }
+
+    throw new RelayError(503, "Market information is unavailable. Enter and approve a manual ZEC total instead.");
   }
 }
