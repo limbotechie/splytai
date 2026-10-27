@@ -1,0 +1,45 @@
+.surface {
+  --app-panel-radius: 24px;
+  --app-pill-radius: 9999px;
+  min-width: 0;
+}
+
+.surface :where(section, article, main, header, form, fieldset) {
+  min-width: 0;
+}
+
+.surface :where(input, select, textarea, img, canvas, video) {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.surface :where(button, a, input, select, textarea):focus-visible {
+  outline: 2px solid var(--foreground);
+  outline-offset: 4px;
+}
+
+.surface :where(button, input, select, textarea) {
+  scroll-margin-block: 6rem;
+}
+
+.ambient {
+  position: absolute;
+  inset: 0 0 auto;
+  height: 38rem;
+  overflow: clip;
+  pointer-events: none;
+  background:
+    radial-gradient(ellipse at 12% 0%, rgb(96 165 250 / 7%), transparent 55%),
+    radial-gradient(ellipse at 95% 25%, rgb(251 146 60 / 5%), transparent 50%);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .surface *,
+  .surface *::before,
+  .surface *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
