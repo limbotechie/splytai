@@ -69,6 +69,17 @@ describe("relay URL and transport hardening", () => {
     expect(second.calls[0].url).toBe(`https://relay.example/api/v1/bills/${id}`);
   });
 
+  it("does not invoke fetch with the RelayClient instance as this receiver", async () => {
+    let receiver: unknown = null;
+    function mockFetch(this: unknown) {
+      receiver = this;
+      return Promise.resolve(respond({ ok: true, service: "splyt-relay", apiVersion: 1 }));
+    }
+    const client = new RelayClient({ baseUrl: "https://relay.example", fetchImpl: mockFetch as unknown as typeof fetch });
+    await client.health();
+    expect(receiver).not.toBe(client);
+  });
+
   it("reports an unreachable relay without leaking the request body", async () => {
     const { client } = harness(() => { throw new TypeError("network down"); });
     await expect(client.health()).rejects.toMatchObject({ status: 0, retryable: true });

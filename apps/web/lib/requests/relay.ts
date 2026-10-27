@@ -169,13 +169,13 @@ function bill(value: unknown): RelayBill {
 export class RelayClient {
   private readonly base: string | null;
   private readonly fetchImpl: typeof fetch;
-
   constructor(private readonly options: RelayOptions) {
     const configuration = relayConfiguration(options.baseUrl);
     if (options.baseUrl?.trim() && configuration.error) throw new RelayApiError(0, configuration.error, false);
     this.base = configuration.baseUrl;
-    this.fetchImpl = options.fetchImpl ?? globalThis.fetch;
-    if (typeof this.fetchImpl !== "function") throw new RelayApiError(0, "This browser cannot contact the relay.", false);
+    const fetcher = options.fetchImpl ?? ((...args: Parameters<typeof fetch>) => globalThis.fetch(...args));
+    if (typeof fetcher !== "function") throw new RelayApiError(0, "This browser cannot contact the relay.", false);
+    this.fetchImpl = (...args: Parameters<typeof fetch>) => fetcher(...args);
   }
 
   get baseUrl(): string | null {
