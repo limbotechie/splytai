@@ -529,14 +529,17 @@ describe("rates endpoint hardening", () => {
 
   it("uses the public live API without an authentication header", async () => {
     let seenKey: string | undefined;
+    let seenUserAgent: string | undefined;
     const fetcher: typeof fetch = async (url, init) => {
       expect(new URL(String(url)).origin).toBe("https://api.coingecko.com");
       seenKey = (init?.headers as Record<string, string> | undefined)?.["x-cg-demo-api-key"];
+      seenUserAgent = (init?.headers as Record<string, string> | undefined)?.["user-agent"];
       return new Response(`{"zcash":{"usd":30,"last_updated_at":${Math.floor(clock / 1000)}}}`);
     };
     const provider = new PublicRates(fetcher, () => clock);
     await provider.get("USD");
     expect(seenKey).toBeUndefined();
+    expect(seenUserAgent).toMatch(/SplytRelay/);
   });
 
   it("deduplicates concurrent fetches for the same currency (pending map)", async () => {

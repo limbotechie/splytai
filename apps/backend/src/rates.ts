@@ -22,8 +22,16 @@ export class PublicRates {
     try {
       const url = new URL("https://api.coingecko.com/api/v3/simple/price");
       url.search = new URLSearchParams({ ids: "zcash", vs_currencies: currency.toLowerCase(), include_last_updated_at: "true" }).toString();
-      const response = await this.fetcher(url, { headers: { accept: "application/json" }, signal: AbortSignal.timeout(8000) });
-      if (!response.ok) throw new Error("Upstream unavailable");
+      const headers: Record<string, string> = {
+        accept: "application/json",
+        "user-agent": "SplytRelay/1.0 (+https://splyttab.vercel.app)",
+      };
+      const apiKey = process.env.COINGECKO_API_KEY || process.env.CG_DEMO_API_KEY;
+      if (apiKey) {
+        headers["x-cg-demo-api-key"] = apiKey;
+      }
+      const response = await this.fetcher(url, { headers, signal: AbortSignal.timeout(8000) });
+      if (!response.ok) throw new Error(`Upstream unavailable (status ${response.status})`);
       const text = await response.text();
       if (text.length > 10000) throw new Error("Invalid upstream response");
       const data = parse(text) as { zcash?: Record<string, unknown> };
@@ -35,7 +43,8 @@ export class PublicRates {
       const quote: Quote = { source: "coingecko", currency, price: price.value, updatedAt: new Date(updatedMs).toISOString(), fetchedAt: new Date(this.now()).toISOString() };
       this.cache.set(currency, { quote, until: this.now() + 60000 });
       return quote;
-    } catch {
+    } catch (error) {
+      console.error("Rates fetch error for currency %s:", currency, error instanceof Error ? error.message : error);
       throw new RelayError(503, "Market information is unavailable. Enter and approve a manual ZEC total instead.");
     }
   }

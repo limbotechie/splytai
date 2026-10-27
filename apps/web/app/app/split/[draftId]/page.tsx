@@ -206,8 +206,25 @@ function SplitContent({ draftId }: { draftId: string }) {
                 ) : conversionSource === "manual" ? (
                   <p className="text-[11px] text-muted-foreground">This is your manually agreed total, not a live market quote.</p>
                 ) : null}
-                {!rateLoading && rateResult?.error ? <p role="alert" className="text-xs text-destructive">{rateResult.error}</p> : null}
-                {(approvalError || (conversionError && !rateLoading)) ? <p role="alert" className="text-xs text-destructive">{approvalError || conversionError}</p> : null}
+                {!rateLoading && rateResult?.error ? (
+                  <div className="flex flex-col gap-1">
+                    <p role="alert" className="text-xs text-destructive">{rateResult.error}</p>
+                    {conversionSource === "coingecko" ? (
+                      <button
+                        type="button"
+                        onClick={() => { setConversionSource("manual"); setApproval(null); setApprovalError(null); }}
+                        className="self-start text-xs text-primary underline hover:opacity-80"
+                      >
+                        Switch to manual ZEC entry
+                      </button>
+                    ) : null}
+                  </div>
+                ) : null}
+                {approvalError ? (
+                  <p role="alert" className="text-xs text-destructive">{approvalError}</p>
+                ) : (conversionError && !rateLoading && !rateResult?.error) ? (
+                  <p role="alert" className="text-xs text-destructive">{conversionError}</p>
+                ) : null}
                 <Action variant="secondary" className="w-full text-xs" disabled={!suggestedZatoshis || Boolean(conversionQuote)}
                   onClick={() => {
                     try {
