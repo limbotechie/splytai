@@ -380,7 +380,11 @@ function BillDetailContent({ billId }: { billId: string }) {
                               variant="primary"
                               onClick={() => {
                                 setSelectedRequest(reqState!);
-                                setConfirmZatoshis("");
+                                const reqZats = reqState?.payload.payload.amountZatoshis ?? "";
+                                const reportedZats = reqState?.reports.length
+                                  ? reqState.reports[reqState.reports.length - 1].payload.claimedZatoshis
+                                  : reqZats;
+                                setConfirmZatoshis(reportedZats || reqZats);
                                 setConfirmOutcome("confirmed_by_organiser");
                                 setConfirmNote("");
                                 setError(null);
@@ -520,8 +524,40 @@ function BillDetailContent({ billId }: { billId: string }) {
             </p>
           </div>
 
-          <div className="space-y-4">
-            <div className="space-y-1.5">
+            {selectedRequest ? (
+              <div className="rounded-xl border border-border/70 bg-background/50 p-3 text-xs space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Requested Share:</span>
+                  <span className="font-mono font-medium text-foreground">
+                    {selectedRequest.payload.payload.amountZatoshis} Zatoshis ({formatZec(BigInt(selectedRequest.payload.payload.amountZatoshis))} ZEC)
+                  </span>
+                </div>
+                {selectedRequest.reports.length ? (
+                  <div className="flex items-center justify-between text-amber-500/90">
+                    <span>Reported by Participant:</span>
+                    <span className="font-mono font-medium">
+                      {selectedRequest.reports[selectedRequest.reports.length - 1].payload.claimedZatoshis} Zatoshis ({formatZec(BigInt(selectedRequest.reports[selectedRequest.reports.length - 1].payload.claimedZatoshis))} ZEC)
+                    </span>
+                  </div>
+                ) : null}
+                {confirmZatoshis !== selectedRequest.payload.payload.amountZatoshis ? (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setConfirmZatoshis(selectedRequest.payload.payload.amountZatoshis);
+                      setConfirmOutcome("confirmed_by_organiser");
+                      setError(null);
+                    }}
+                    className="text-[11px] text-primary hover:underline pt-1 block"
+                  >
+                    Fill full requested amount ({selectedRequest.payload.payload.amountZatoshis} Zatoshis)
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
+
+            <div className="space-y-4">
+              <div className="space-y-1.5">
               <label htmlFor="confirm-amount" className="text-xs font-medium">
                 Cumulative Received (Zatoshis)
               </label>
@@ -531,7 +567,18 @@ function BillDetailContent({ billId }: { billId: string }) {
                 inputMode="numeric"
                 value={confirmZatoshis}
                 onChange={(e) => {
-                  if (/^(?:0|[1-9]\d{0,15})?$/.test(e.target.value)) setConfirmZatoshis(e.target.value);
+                  if (/^(?:0|[1-9]\d{0,15})?$/.test(e.target.value)) {
+                    const val = e.target.value;
+                    setConfirmZatoshis(val);
+                    setError(null);
+                    if (val && selectedRequest && confirmOutcome !== "correction") {
+                      const req = BigInt(selectedRequest.payload.payload.amountZatoshis);
+                      const entered = BigInt(val);
+                      if (entered === req) setConfirmOutcome("confirmed_by_organiser");
+                      else if (entered < req && entered > 0n) setConfirmOutcome("partially_confirmed");
+                      else if (entered > req) setConfirmOutcome("overpaid");
+                    }
+                  }
                 }}
                 className={`${fieldClass} font-mono`}
               />
@@ -551,6 +598,10 @@ function BillDetailContent({ billId }: { billId: string }) {
                   const outcome = e.target.value;
                   if (outcome === "confirmed_by_organiser" || outcome === "partially_confirmed" || outcome === "overpaid" || outcome === "correction") {
                     setConfirmOutcome(outcome);
+                    setError(null);
+                    if (outcome === "confirmed_by_organiser" && selectedRequest) {
+                      setConfirmZatoshis(selectedRequest.payload.payload.amountZatoshis);
+                    }
                   }
                 }}
                 className={fieldClass}
@@ -561,6 +612,34 @@ function BillDetailContent({ billId }: { billId: string }) {
                 <option value="overpaid">Overpaid</option>
               </select>
             </div>
+
+            {(() => {
+              if (!selectedRequest || !confirmZatoshis || confirmOutcome === "correction") return null;
+              const req = BigInt(selectedRequest.payload.payload.amountZatoshis);
+              const entered = BigInt(confirmZatoshis);
+              if (confirmOutcome === "confirmed_by_organiser" && entered !== req) {
+                return (
+                  <p className="text-xs text-amber-500">
+                    {entered < req ? "Entered amount is less than the requested share." : "Entered amount is greater than the requested share."} Set Outcome to &quot;{entered < req ? "Partial Payment" : "Overpaid"}&quot; or click above to fill the full amount.
+                  </p>
+                );
+              }
+              if (confirmOutcome === "partially_confirmed" && entered >= req) {
+                return (
+                  <p className="text-xs text-amber-500">
+                    Entered amount is {entered === req ? "equal to" : "greater than"} the requested share. Set Outcome to &quot;{entered === req ? "Full Payment" : "Overpaid"}&quot;.
+                  </p>
+                );
+              }
+              if (confirmOutcome === "overpaid" && entered <= req) {
+                return (
+                  <p className="text-xs text-amber-500">
+                    Entered amount is not greater than the requested share. Set Outcome to &quot;{entered === req ? "Full Payment" : "Partial Payment"}&quot;.
+                  </p>
+                );
+              }
+              return null;
+            })()}
 
             <div className="space-y-1.5">
               <label htmlFor="confirm-note" className="text-xs font-medium">
