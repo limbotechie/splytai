@@ -2,29 +2,34 @@
 
 import Link from "next/link";
 import { useEffect, useState } from "react";
-import { ArrowUpRight, Receipt, Users, Clock, Archive } from "lucide-react";
+import { ArrowUpRight, Receipt, Users, Clock, Archive, Check } from "lucide-react";
 import { listLocalBills } from "@/lib/workflow/bill";
+import { listLocalRequests } from "@/lib/workflow/request";
+import { evaluateBillTracking } from "@/lib/workflow/tracking";
 import type { LocalRecord } from "@/lib/private-workspace/storage";
 import type { LocalBill } from "@/lib/bills/types";
+import type { RequestState } from "@/lib/requests/types";
 import { formatZec } from "@/lib/bills/money";
 import { Panel, Pill, StatePanel, actionClass } from "@/components/app/common/Primitives";
 
 export function BillList() {
   const [bills, setBills] = useState<LocalRecord<LocalBill>[] | null>(null);
+  const [requests, setRequests] = useState<LocalRecord<RequestState>[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     let active = true;
-    listLocalBills()
-      .then((records) => {
+    Promise.all([listLocalBills(), listLocalRequests()])
+      .then(([billRecords, requestRecords]) => {
         if (active) {
           // Sort newest first
-          const sorted = [...records].sort((a, b) => {
+          const sorted = [...billRecords].sort((a, b) => {
             const timeA = Date.parse(a.value.manifest.createdAt || "0");
             const timeB = Date.parse(b.value.manifest.createdAt || "0");
             return timeB - timeA;
           });
           setBills(sorted);
+          setRequests(requestRecords);
         }
       })
       .catch((err) => {
@@ -78,6 +83,10 @@ export function BillList() {
         const participantCount = manifest.participants.length;
         const totalZatoshis = BigInt(manifest.conversion.wholeBillZatoshis);
         const isArchived = manifest.status === "archived";
+        const billRequests = requests
+          .filter((r) => r.value.billId === manifest.billId && r.value.role === "organiser")
+          .map((r) => r.value);
+        const isSettled = evaluateBillTracking(bill, billRequests).isFullySettled;
 
         return (
           <Link
@@ -95,8 +104,12 @@ export function BillList() {
                     <Pill tone="neutral" className="py-0 px-2 text-[10px]">
                       <Archive size={11} /> Archived
                     </Pill>
-                  ) : (
+                  ) : isSettled ? (
                     <Pill tone="success" className="py-0 px-2 text-[10px]">
+                      <Check size={11} /> Settled
+                    </Pill>
+                  ) : (
+                    <Pill tone="info" className="py-0 px-2 text-[10px]">
                       Active
                     </Pill>
                   )}

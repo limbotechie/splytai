@@ -23,6 +23,12 @@ export function Dock() {
   const pathname = usePathname();
   const router = useRouter();
 
+  const isNewSplitActive =
+    pathname === "/app/scan" ||
+    pathname.startsWith("/app/review") ||
+    pathname.startsWith("/app/members") ||
+    pathname.startsWith("/app/split");
+
   const items = [
     ...NAV_ITEMS.slice(0, 1).map((t) => ({
       icon: t.icon,
@@ -33,10 +39,8 @@ export function Dock() {
     {
       icon: Plus,
       label: "New Split",
-      active: pathname === "/app/scan",
+      active: isNewSplitActive,
       onClick: () => router.push("/app/scan"),
-      iconClassName: "w-5 h-5",
-      className: "bg-primary rounded-full text-primary-foreground hover:bg-primary/90 shadow-lg shadow-primary/30",
     },
     ...NAV_ITEMS.slice(1).map((t) => ({
       icon: t.icon,

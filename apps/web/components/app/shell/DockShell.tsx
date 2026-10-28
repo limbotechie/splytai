@@ -11,12 +11,8 @@ import { actionClass, Pill } from "../common/Primitives";
 import styles from "../common/AppSurface.module.css";
 
 const DOCK_HIDDEN_PATTERNS = [
-  /^\/app\/scan$/,
   /^\/app\/bills\/[^/]+$/,
   /^\/app\/pay\//,
-  /^\/app\/review\//,
-  /^\/app\/members\//,
-  /^\/app\/split\//,
 ];
 
 export function DockShell({ children }: { children: ReactNode }) {

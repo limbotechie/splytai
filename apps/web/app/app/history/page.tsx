@@ -1,41 +1,47 @@
 "use client";
 
-import { ArrowUpRight, Search, Clock, Users, Receipt, Archive } from "lucide-react";
+import { ArrowUpRight, Search, Clock, Users, Receipt, Archive, Check } from "lucide-react";
 import Link from "next/link";
 import { useEffect, useMemo, useState } from "react";
 import { DraftRecoveryList } from "@/components/app/home/DraftRecoveryList";
 import { listLocalBills } from "@/lib/workflow/bill";
+import { listLocalRequests } from "@/lib/workflow/request";
+import { evaluateBillTracking } from "@/lib/workflow/tracking";
 import type { LocalRecord } from "@/lib/private-workspace/storage";
 import type { LocalBill } from "@/lib/bills/types";
+import type { RequestState } from "@/lib/requests/types";
 import { formatZec } from "@/lib/bills/money";
 import { cn } from "@/lib/utils";
 import { PageHeader, Panel, Pill, StatePanel, actionClass } from "@/components/app/common/Primitives";
 
-type BillFilter = "all" | "active" | "archived";
+type BillFilter = "all" | "active" | "settled" | "archived";
 
 const FILTER_TABS: { label: string; value: BillFilter }[] = [
   { label: "All", value: "all" },
   { label: "Active", value: "active" },
+  { label: "Settled", value: "settled" },
   { label: "Archived", value: "archived" },
 ];
 
 export default function HistoryPage() {
   const [bills, setBills] = useState<LocalRecord<LocalBill>[] | null>(null);
+  const [requests, setRequests] = useState<LocalRecord<RequestState>[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [filter, setFilter] = useState<BillFilter>("all");
   const [search, setSearch] = useState("");
 
   useEffect(() => {
     let active = true;
-    listLocalBills()
-      .then((records) => {
+    Promise.all([listLocalBills(), listLocalRequests()])
+      .then(([billRecords, requestRecords]) => {
         if (active) {
-          const sorted = [...records].sort((a, b) => {
+          const sorted = [...billRecords].sort((a, b) => {
             const timeA = Date.parse(a.value.manifest.createdAt || "0");
             const timeB = Date.parse(b.value.manifest.createdAt || "0");
             return timeB - timeA;
           });
           setBills(sorted);
+          setRequests(requestRecords);
         }
       })
       .catch((err) => {
@@ -48,11 +54,28 @@ export default function HistoryPage() {
     };
   }, []);
 
+  const requestsByBillId = useMemo(() => {
+    const map = new Map<string, RequestState[]>();
+    for (const r of requests) {
+      const bId = r.value.billId;
+      if (bId && r.value.role === "organiser") {
+        const list = map.get(bId) ?? [];
+        list.push(r.value);
+        map.set(bId, list);
+      }
+    }
+    return map;
+  }, [requests]);
+
   const filteredBills = useMemo(() => {
     if (!bills) return [];
     return bills.filter(({ value: bill }) => {
       const isArchived = bill.manifest.status === "archived";
-      if (filter === "active" && isArchived) return false;
+      const billRequests = requestsByBillId.get(bill.manifest.billId) ?? [];
+      const isSettled = evaluateBillTracking(bill, billRequests).isFullySettled;
+
+      if (filter === "active" && (isArchived || isSettled)) return false;
+      if (filter === "settled" && (isArchived || !isSettled)) return false;
       if (filter === "archived" && !isArchived) return false;
 
       if (search.trim()) {
@@ -67,7 +90,7 @@ export default function HistoryPage() {
 
       return true;
     });
-  }, [bills, filter, search]);
+  }, [bills, filter, requestsByBillId, search]);
 
   return (
     <div className="flex flex-1 flex-col gap-9 py-8 sm:py-12">
@@ -143,6 +166,8 @@ export default function HistoryPage() {
               title={
                 search.trim()
                   ? "No matching splits found"
+                  : filter === "settled"
+                  ? "No settled splits yet"
                   : filter === "archived"
                   ? "No archived splits"
                   : "No hosted splits found"
@@ -150,6 +175,8 @@ export default function HistoryPage() {
               description={
                 search.trim()
                   ? `No bills matched "${search}". Try clearing your search query.`
+                  : filter === "settled"
+                  ? "Splits where all participant payments have been confirmed will appear here."
                   : filter === "archived"
                   ? "Archived splits will appear here when you archive completed bills."
                   : "Scan a receipt or enter items manually to host your first private reimbursement request."
@@ -180,6 +207,8 @@ export default function HistoryPage() {
                 const participantCount = manifest.participants.length;
                 const totalZatoshis = BigInt(manifest.conversion.wholeBillZatoshis);
                 const isArchived = manifest.status === "archived";
+                const billRequests = requestsByBillId.get(manifest.billId) ?? [];
+                const isSettled = evaluateBillTracking(bill, billRequests).isFullySettled;
 
                 return (
                   <Link
@@ -197,8 +226,12 @@ export default function HistoryPage() {
                             <Pill tone="neutral" className="py-0 px-2 text-[10px]">
                               <Archive size={11} /> Archived
                             </Pill>
-                          ) : (
+                          ) : isSettled ? (
                             <Pill tone="success" className="py-0 px-2 text-[10px]">
+                              <Check size={11} /> Settled
+                            </Pill>
+                          ) : (
+                            <Pill tone="info" className="py-0 px-2 text-[10px]">
                               Active
                             </Pill>
                           )}
